@@ -146,3 +146,19 @@ Thumbs.db
 
 # Sensitive info
 github信息.txt
+
+# Analysis notes (not part of project source)
+*AGQ与DFQ结合的可能性分析*.md
+*融合AIQViT*.md
+*提升MoRA效果*.md
+*复现结果*.txt
+
+# Reference papers (not project source)
+08-PTQ4SAM*.pdf
+12_PTQ4ViT*.pdf
+13_AIQViT*.pdf
+16-MoRA*.pdf
+the_visual_computer-BAQPTQ4SAM.pdf
+
+# Extracted figures tmp
+pdf_figures/

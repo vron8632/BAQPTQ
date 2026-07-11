@@ -1,19 +1,53 @@
-# PTQ4SAM: Post-Training Quantization for Segment Anything (CVPR 2024)
+# BAQ: Bypass-Aware Quantization for Segment Anything Model
 
-[Chengtao Lv*](https://scholar.google.com/citations?user=r8vseSUAAAAJ&hl=en), [Hong Chen*](https://scholar.google.com/citations?user=Gw16nzQAAAAJ&hl=en&oi=sra), [Jinyang Guo📧](https://scholar.google.com/citations?user=uJGeT1AAAAAJ&hl=en&oi=sra), [Yifu Ding](https://scholar.google.com/citations?user=RCEI1r0AAAAJ&hl=en&oi=sra), [Xianglong Liu](https://scholar.google.com/citations?user=8VY7ZDcAAAAJ&hl=en&oi=ao)
+[Anonymous Authors]
 
-(* denotes equal contribution, 📧 denotes corresponding author.)
+**BAQ** is a post-training quantization (PTQ) framework for Segment Anything Model (SAM) that explicitly compensates for **structure-aware information loss** through lightweight learnable bypass modules. Built on top of PTQ4SAM, BAQ addresses the limitations of existing PTQ methods by recovering low-rank structure in FFN layers, modeling activation quantization residuals, and calibrating per-head attention distributions.
 
 ## Overview
-![overview](./img/framework.png)
-Segment Anything Model (SAM) has achieved impressive performance in many computer vision tasks. However, as a large-scale model, the immense memory and computation costs hinder its practical deployment. In this paper, we propose a post-training quantization (PTQ) framework for Segment Anything Model, namely [PTQ4SAM](https://arxiv.org/pdf/2405.03144). First, we investigate the inherent bottleneck of SAM quantization attributed to the bimodal distribution in post-Key-Linear activations. We analyze its characteristics from both per-tensor and per-channel perspectives, and propose a Bimodal Integration strategy, which utilizes a mathematically equivalent sign operation to transform the bimodal distribution into a relatively easy-quantized normal distribution offline. Second, SAM encompasses diverse attention mechanisms (i.e., self-attention and two-way cross-attention), resulting in substantial variations in the post-Softmax distributions. Therefore, we introduce an Adaptive Granularity Quantization for Softmax through searching the optimal power-of-two base, which is hardware-friendly.
 
+![BAQ Framework](./img/framework.png)
+
+Segment Anything Model (SAM) demonstrates powerful zero-shot capabilities but suffers from high computational cost, making deployment on edge devices challenging. Existing PTQ methods exhibit limitations when applied to SAM, primarily due to SAM's hybrid attention mechanisms and complex activation distributions.
+
+We identify that low-bit quantization causes **structure-aware information loss** beyond conventional quantization error, including:
+
+- Disrupted low-rank structure in feed-forward network (FFN) layers
+- Per-head heterogeneity in attention distributions
+
+To address these issues, BAQ introduces three lightweight learnable compensation modules:
+
+1. **Low-Rank Bypass Compensation (LRBC)** — Restores FFN weight structure via low-rank corrections
+2. **Modulated Residual Adapter (MoRA)** — Models activation quantization residuals through group-wise compression-decomposition
+3. **Per-Head Dynamic Calibration (PHDC)** — Adapts quantized attention distributions at the head level
+
+## Results
+
+### Instance Segmentation on COCO val2017 (SAM-B + YOLOX)
+
+| Method | FP | W6A6 | W4A4 |
+|--------|:--:|:----:|:----:|
+| PTQ4SAM-S | 37.0 | 17.4 | 1.2 |
+| QDrop | 37.0 | 33.6 | 13.3 |
+| PTQ4SAM-L | 37.0 | 34.3 | 18.4 |
+| **BAQ (Ours)** | **37.0** | **35.9** | **20.1** |
+
+### Semantic Segmentation on ADE20K (SAM-B + SegFormer)
+
+| Method | FP | W6A6 | W4A4 |
+|--------|:--:|:----:|:----:|
+| QDrop | 33.15 | 32.57 | 31.79 |
+| PTQ4SAM-L | 33.15 | 32.65 | 31.85 |
+| **BAQ (Ours)** | **33.15** | **33.05** | **32.45** |
 
 ## Create Environment
-🍺🍺🍺 You can refer the ``environment.sh`` in the root directory or install step by step.
+
+You can refer to `environment.sh` in the root directory or install step by step.
+
 1. Install PyTorch
+
 ```
-conda create -n ptq4sam python=3.7 -y
+conda create -n baq python=3.7 -y
 pip install torch torchvision
 ```
 
@@ -39,6 +73,7 @@ cd ../../..
 ```
 
 5. Install mmdet
+
 ```
 cd mmdetection/
 python3 setup.py build develop
@@ -46,7 +81,8 @@ cd ..
 ```
 
 ## Prepare Dataset and Models
-Download the official COCO dataset, put them into the corresponding folders of `datasets/` and recollect them as the following form:
+
+Download the official COCO dataset and organize as follows:
 
 ```shell
 ├── data
@@ -57,7 +93,7 @@ Download the official COCO dataset, put them into the corresponding folders of `
 │   │   ├── test2017
 ```
 
-Download the pretrain weights (SAM and detectors), put them into the corresponding folders of `ckpt/`:
+Download pretrain weights to `ckpt/`:
 
 - `sam_b`: [ViT-B SAM](https://dl.fbaipublicfiles.com/segment_anything/sam_vit_b_01ec64.pth)
 - `sam_l`: [ViT-L SAM](https://dl.fbaipublicfiles.com/segment_anything/sam_vit_l_0b3195.pth)
@@ -68,33 +104,88 @@ Download the pretrain weights (SAM and detectors), put them into the correspondi
 - `dino`: [DINO](https://projects4jw.blob.core.windows.net/focalnet/release/detection/focalnet_large_fl4_o365_finetuned_on_coco.pth)
 
 ## Usage
-To perform quantization on models, specify the model configuration and quantization configuration. For example, to perform W6A6 quantization for SAM-B with a YOLO detector, use the following command:
-```shell
-python ptq4sam/solver/test_quant.py \
---config ./projects/configs/yolox/yolo_l-sam-vit-l.py \
---q_config exp/config66.yaml --quant-encoder
-```
-- yolo_l-sam-vit-l.py: configuration file for the SAM-B model with YOLO detector.
-- config66.yaml: configuration file for W6A6 quantization.
-- quant-encoder: quant the encoder of SAM.
 
+### Basic Quantization
+
+To perform BAQ quantization with MoRA bypass, specify the model configuration and quantization configuration:
+
+```bash
+python test_quant.py \
+  --config ./projects/configs/yolox/yolo_l-sam-vit-b.py \
+  --q_config exp/config66_mora.yaml \
+  --quant-encoder
+```
+
+- `yolo_l-sam-vit-b.py`: configuration file for SAM-B with YOLOX detector
+- `config66_mora.yaml`: W6A6 quantization with MoRA bypass (recommended)
+- `quant-encoder`: quantize the encoder of SAM
+
+### Quantization Configurations
+
+The quantization config files in `exp/` control all aspects of BAQ:
+
+| Config | Bit-width | Bypass | Description |
+|--------|-----------|--------|-------------|
+| `config66.yaml` | W6A6 | MoRA | BAQ with MoRA bypass |
+| `config66_mora.yaml` | W6A6 | MoRA+DIAGQ | Full BAQ with MoRA and DIAGQ |
+| `config44.yaml` | W4A4 | - | Low-bit baseline |
+
+### Bypass Module Control
+
+The YAML config supports toggling each bypass module:
+
+```yaml
+ptq4sam:
+  # MoRA Module
+  mora_config:
+    enabled: True                # enable/disable MoRA bypass
+    rank: 256                    # bypass rank
+    alpha: 0.5                   # bypass scaling factor
+
+  # DIAGQ (DFQ + AGQ fusion for Softmax)
+  DIAGQ: True                    # use dynamic interval AGQ
+  AGQ: False                     # disable original AGQ
+  BIG: True                      # bimodal integration
+```
 
 We recommend using a GPU with more than 40GB for experiments.
-If you want to visualize the prediction results, you can achieve this by specifying `--show-dir`.
-Bimodal distributions mainly occur in the `mask decoder` of SAM-B and SAM-L.
+
+## Project Structure
+
+```
+├── ptq4sam/                     # Core quantization library
+│   ├── quantization/
+│   │   ├── mora_adapter.py      # MoRA bypass layer
+│   │   ├── quantized_module.py  # QLinearMoRA quantized layer
+│   │   ├── dynamic_interval_quantizer.py  # DIAGQ (DFQ+AGQ fusion)
+│   │   ├── fake_quant.py        # Fake quantize implementations
+│   │   └── observer.py          # Quantization observers
+│   ├── model/
+│   │   └── quant_model.py       # Quantized model definition
+│   └── solver/
+│       ├── test_quant.py        # Main evaluation script
+│       ├── quant_coco.py        # COCO quantization pipeline
+│       └── recon.py             # Reconstruction optimization
+├── exp/                         # Quantization config files
+├── projects/                    # Model configurations
+├── mmdetection/                 # MMDetection framework
+├── test_quant.py                # Root-level entry script
+└── recon.py                     # Root-level reconstruction
+```
 
 ## Reference
-If you find this repo useful for your research, please consider citing the paper.
+
+If you find this repo useful for your research, please consider citing:
+
 ```
-@inproceedings{lv2024ptq4sam,
-  title={PTQ4SAM: Post-Training Quantization for Segment Anything},
-  author={Lv, Chengtao and Chen, Hong and Guo, Jinyang and Ding, Yifu and Liu, Xianglong},
-  booktitle={Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition},
-  pages={15941--15951},
-  year={2024}
+@article{baq2025,
+  title={Bypass-Aware Quantization: Compensating Structure Loss in Post-Training Quantization for Segment Anything Model},
+  author={Anonymous Authors},
+  journal={Under Review},
+  year={2025}
 }
 ```
 
-
 ## Acknowledgments
-The code of PTQ4SAM was based on [Prompt-Segment-Anything](https://github.com/RockeyCoss/Prompt-Segment-Anything) and [QDrop](https://github.com/wimh966/QDrop). We thank for their open-sourced code.
+
+This codebase is built upon [PTQ4SAM](https://github.com/chengtao-lv/PTQ4SAM) (CVPR 2024), [Prompt-Segment-Anything](https://github.com/RockeyCoss/Prompt-Segment-Anything), and [QDrop](https://github.com/wimh966/QDrop). We thank the authors for their open-source contributions.
