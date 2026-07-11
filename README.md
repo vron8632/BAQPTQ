@@ -110,7 +110,7 @@ Download pretrain weights to `ckpt/`:
 To perform BAQ quantization with MoRA bypass, specify the model configuration and quantization configuration:
 
 ```bash
-python test_quant.py \
+python ptq4sam/solver/test_quant.py \
   --config ./projects/configs/yolox/yolo_l-sam-vit-b.py \
   --q_config exp/config66_mora.yaml \
   --quant-encoder

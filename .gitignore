@@ -162,3 +162,23 @@ the_visual_computer-BAQPTQ4SAM.pdf
 
 # Extracted figures tmp
 pdf_figures/
+
+# Root-level experiment figures (keep only content under ptq4sam/)
+/agq_comparison.png
+/effective_rank_recovery.pdf
+/effective_rank_recovery.png
+/lrbc_svd_spectra.pdf
+/lrbc_svd_spectra.png
+/motivation_figure.pdf
+/motivation_figure.png
+/rank_recovery_correct.png
+/rank_recovery_cumulative.pdf
+/rank_recovery_cumulative.png
+/rank_recovery_spectra.pdf
+/rank_recovery_spectra.png
+/svd_energy.pdf
+/svd_spectrum_comparison.png
+/svd_spectrum_optimized.png
+
+# Root-level test scripts
+/test_*.py
